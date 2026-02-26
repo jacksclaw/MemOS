@@ -54,16 +54,14 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
             metadata["user_name"] = user_name
 
         # Safely process metadata
+        # Note: _prepare_node_metadata already serializes metadata["sources"] to JSON strings.
+        # Do NOT serialize sources again here — double-serialization corrupts the data on recall.
         metadata = _prepare_node_metadata(metadata)
 
         # Initialize delete_time and delete_record_id fields
         metadata.setdefault("delete_time", "")
         metadata.setdefault("delete_record_id", "")
 
-        # serialization
-        if metadata["sources"]:
-            for idx in range(len(metadata["sources"])):
-                metadata["sources"][idx] = json.dumps(metadata["sources"][idx])
         # Extract required fields
         embedding = metadata.pop("embedding", None)
         if embedding is None:
@@ -1059,13 +1057,13 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
             if time_field in node and hasattr(node[time_field], "isoformat"):
                 node[time_field] = node[time_field].isoformat()
         node.pop("user_name", None)
-        # serialization
+        # deserialization — restore JSON-serialized source dicts back to objects
         if node["sources"]:
             for idx in range(len(node["sources"])):
                 if not (
                     isinstance(node["sources"][idx], str)
                     and node["sources"][idx][0] == "{"
-                    and node["sources"][idx][0] == "}"
+                    and node["sources"][idx][-1] == "}"
                 ):
                     break
                 node["sources"][idx] = json.loads(node["sources"][idx])
@@ -1095,13 +1093,13 @@ class Neo4jCommunityGraphDB(Neo4jGraphDB):
                 if time_field in node and hasattr(node[time_field], "isoformat"):
                     node[time_field] = node[time_field].isoformat()
             node.pop("user_name", None)
-            # serialization
+            # deserialization — restore JSON-serialized source dicts back to objects
             if node.get("sources"):
                 for idx in range(len(node["sources"])):
                     if not (
                         isinstance(node["sources"][idx], str)
                         and node["sources"][idx][0] == "{"
-                        and node["sources"][idx][0] == "}"
+                        and node["sources"][idx][-1] == "}"
                     ):
                         break
                     node["sources"][idx] = json.loads(node["sources"][idx])

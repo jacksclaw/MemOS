@@ -153,6 +153,18 @@ class TextualMemoryMetadata(BaseModel):
         description="Record the memory id covered by the update",
     )
 
+    @field_validator("info", mode="before")
+    @classmethod
+    def _parse_info(cls, v: Any) -> dict | None:
+        """Parse JSON-stringified info dicts back to dicts (Neo4j serialization round-trip)."""
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        return v
+
     def __str__(self) -> str:
         """Pretty string representation of the metadata."""
         meta = self.model_dump(exclude_none=True)

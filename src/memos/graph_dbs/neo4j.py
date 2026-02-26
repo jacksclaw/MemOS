@@ -38,10 +38,14 @@ def _prepare_node_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     if embedding and isinstance(embedding, list):
         metadata["embedding"] = [float(x) for x in embedding]
 
-    # serialization
-    if metadata["sources"]:
-        for idx in range(len(metadata["sources"])):
-            metadata["sources"][idx] = json.dumps(metadata["sources"][idx])
+    # serialization — use .get() to avoid KeyError when sources absent (excluded_none),
+    # and guard against double-serializing strings already converted upstream.
+    sources = metadata.get("sources")
+    if sources:
+        for idx in range(len(sources)):
+            item = sources[idx]
+            if isinstance(item, dict):
+                metadata["sources"][idx] = json.dumps(item)
     return metadata
 
 

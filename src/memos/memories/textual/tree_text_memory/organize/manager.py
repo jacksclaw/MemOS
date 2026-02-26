@@ -1,3 +1,4 @@
+import json
 import re
 import traceback
 import uuid
@@ -18,6 +19,31 @@ from memos.memories.textual.tree_text_memory.organize.reorganizer import (
 
 
 logger = get_logger(__name__)
+
+
+def _sanitize_neo4j_metadata(metadata: dict) -> dict:
+    """
+    JSON-stringify any dict or list-of-dicts values so Neo4j never receives a
+    Map property (which it cannot store as a node property).
+
+    Neo4j only accepts primitives (str/int/float/bool) or arrays of primitives.
+    Complex fields produced by model_dump() — e.g. ``history``, ``sources``,
+    ``info`` contents — must be serialized before the batch write.
+
+    Also ensures ``sources`` always exists as a list so that downstream
+    ``_prepare_node_metadata`` never raises a ``KeyError``.
+    """
+    result: dict = {}
+    for k, v in metadata.items():
+        if isinstance(v, dict):
+            result[k] = json.dumps(v)
+        elif isinstance(v, list) and any(isinstance(i, dict) for i in v):
+            result[k] = [json.dumps(i) if isinstance(i, dict) else i for i in v]
+        else:
+            result[k] = v
+    # Guarantee 'sources' key so _prepare_node_metadata never KeyErrors
+    result.setdefault("sources", [])
+    return result
 
 
 def extract_working_binding_ids(mem_items: list[TextualMemoryItem]) -> set[str]:
@@ -171,6 +197,8 @@ class MemoryManager:
                     update={"memory_type": "WorkingMemory"}
                 ).model_dump(exclude_none=True)
                 working_metadata["updated_at"] = datetime.now().isoformat()
+                # Serialize complex properties so Neo4j never receives a Map value
+                working_metadata = _sanitize_neo4j_metadata(working_metadata)
                 working_nodes.append(
                     {
                         "id": working_id,
@@ -200,6 +228,9 @@ class MemoryManager:
                     metadata_dict["background"] = (
                         f"{prev_bg} || {binding_line}" if prev_bg else binding_line
                     )
+
+                # Serialize complex properties so Neo4j never receives a Map value
+                metadata_dict = _sanitize_neo4j_metadata(metadata_dict)
 
                 graph_nodes.append(
                     {
